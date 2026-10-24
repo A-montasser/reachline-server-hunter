@@ -1,0 +1,47 @@
+name: Hunt for the Oracle server
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 * * * *"   # safety net: restarts the hunt if it ever stopped
+permissions:
+  contents: read
+  actions: write
+  issues: write
+concurrency:
+  group: hunt
+  cancel-in-progress: false
+jobs:
+  hunt:
+    if: github.event_name == 'workflow_dispatch' || vars.OCI_HUNT == 'on'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip, cache-dependency-path: requirements.txt}
+      - run: pip install -r requirements.txt
+      - name: Keep trying
+        id: hunt
+        env:
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_SUBNET_OCID: ${{ secrets.OCI_SUBNET_OCID }}
+          OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+        run: bash scripts/hunt.sh
+      - name: Server created - tell the owner and stop
+        if: steps.hunt.outputs.result == 'done'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "Oracle server created" \
+            --body "The Reachline server now exists. Open Oracle Cloud > Compute > Instances to see its address. Then delete the Oracle API key and all OCI_* secrets."
+          gh variable set OCI_HUNT --repo "$GITHUB_REPOSITORY" --body off
+          gh workflow disable hunt.yml --repo "$GITHUB_REPOSITORY"
+      - name: Time is up for this round - start the next one
+        if: steps.hunt.outputs.result == 'again'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run hunt.yml --repo "$GITHUB_REPOSITORY"
