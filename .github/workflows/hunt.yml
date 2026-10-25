@@ -30,6 +30,8 @@ jobs:
           OCI_REGION: ${{ secrets.OCI_REGION }}
           OCI_SUBNET_OCID: ${{ secrets.OCI_SUBNET_OCID }}
           OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+          OCI_OCPUS: ${{ vars.OCI_OCPUS }}
+          OCI_MEMORY_GB: ${{ vars.OCI_MEMORY_GB }}
         run: bash scripts/hunt.sh
       - name: Server created - tell the owner and stop
         if: steps.hunt.outputs.result == 'done'
